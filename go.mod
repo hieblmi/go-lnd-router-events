@@ -1,4 +1,4 @@
-module github.com/hieblmi/go-lnd-router-events/events
+module github.com/hieblmi/go-lnd-router-events
 
 replace go.etcd.io/etcd => go.etcd.io/etcd v0.5.0-alpha.5.0.20201125193152-8a03d2e9614b
 
