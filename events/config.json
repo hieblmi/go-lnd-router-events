@@ -1,0 +1,5 @@
+{
+"MacaroonPath": "/home/xxx/.lnd/data/chain/bitcoin/mainnet/admin.macaroon",
+"CertPath": "/home/xxx/.lnd/tls.cert",
+"RpcHost": "localhost:10009"
+}
