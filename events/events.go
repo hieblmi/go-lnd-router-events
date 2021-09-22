@@ -27,10 +27,7 @@ type RoutingListener struct{}
 
 type Observer interface {
 	Update(event Event)
-}
-
-type EventConsumer struct {
-	Name String
+	GetName() string
 }
 
 type Event struct {
@@ -111,9 +108,9 @@ func New(cfg *Config) *RoutingListener {
 	defer conn.Close()
 
 	router = routerrpc.NewRouterClient(conn)
-	lncli = lnrpc.NewLightningClient(conn)
+	lndcli = lnrpc.NewLightningClient(conn)
 
-	return &EventListener{}
+	return &RoutingListener{}
 }
 
 func (r *RoutingListener) Start() {
@@ -134,17 +131,17 @@ func (r *RoutingListener) Start() {
 		//		case *routerrpc.HtlcEvent_SettleEvent:
 		//			log.Printf("Settle Event Preimage: %#v\n", event.GetSettleEvent())
 		case *routerrpc.HtlcEvent_ForwardEvent:
-			incomingChanInfo, err := lnClient.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
+			incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
 			if err != nil {
 				log.Println("Cannot get incoming channel info")
 				continue
 			}
-			outgoingChanInfo, err := lnClient.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
+			outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
 			if err != nil {
 				log.Println("Cannot get outgoing channel info")
 				continue
 			}
-			UpdateAll(&Event{
+			r.UpdateAll(&Event{
 				fromPubKey:    incomingChanInfo.Node1Pub,
 				fromAlias:     incomingChanInfo.Node1Pub,
 				incomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
@@ -162,23 +159,23 @@ func (r *RoutingListener) Start() {
 	}
 }
 
-func (r *RoutingListener) Register(c EventConsumer) {
-	log.Printf("Registering observer %s\n", c.Name)
-	observers[c.name] = c
+func (r *RoutingListener) Register(o Observer) {
+	log.Printf("Registering observer %s\n", o.GetName())
+	observers[o.GetName()] = o
 }
 
-func (r *RoutingListener) Deregister(c EventConsumer) {
-	log.Printf("Deregistering observer %s\n", c.Name)
-	_, exists := observers[c.name]
+func (r *RoutingListener) Deregister(o Observer) {
+	log.Printf("Deregistering observer %s\n", o.GetName())
+	_, exists := observers[o.GetName()]
 	if exists {
-		delete(observers, c.name)
+		delete(observers, o.GetName())
 	} else {
 		log.Printf("Cannot deregister. EventConsumer does not exists")
 	}
 }
 
 func (r *RoutingListener) UpdateAll(event *Event) {
-	for _, eventConsumer := range observers {
-		eventConsumer.Update(event)
+	for _, o := range observers {
+		o.Update(*event)
 	}
 }
