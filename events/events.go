@@ -2,8 +2,6 @@ package events
 
 import (
 	"context"
-	"encoding/json"
-	"flag"
 	"io/ioutil"
 	"log"
 	"os"
@@ -17,16 +15,16 @@ import (
 )
 
 type Observable interface {
-	Register(observer Observer)
-	Deregister(observer Observer)
+	Register(observer *Observer)
+	Deregister(observer *Observer)
 	Start()
-	notifyAll(event Event)
+	notifyAll(event *Event)
 }
 
 type RoutingListener struct{}
 
 type Observer interface {
-	Update(event Event)
+	Update(event *Event)
 	GetName() string
 }
 
@@ -53,28 +51,8 @@ var lndcli lnrpc.LightningClient
 
 // Reads lnd config parameters
 // Creates a new instance of router event listener that observers can subscribe to
-func New(cfg *Config) *RoutingListener {
+func New(config *Config) *RoutingListener {
 	observers = make(map[string]Observer)
-	c := flag.String("config", "./config.json", "Specify the configuration file")
-	flag.Parse()
-	file, err := os.Open(*c)
-	if err != nil {
-		log.Fatal("Cannot open config file: ", err)
-	}
-	defer file.Close()
-
-	config := Config{}
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&config)
-	if err != nil {
-		log.Fatal("Cannot decode config JSON: ", err)
-	}
-
-	b, err := json.MarshalIndent(config, "", "      ")
-	if err != nil {
-		log.Println("Cannot indent json config.")
-	}
-	log.Printf("Printing config.json: %s\n", string(b))
 
 	macaroonBytes, err := ioutil.ReadFile(config.MacaroonPath)
 	if err != nil {
@@ -176,6 +154,6 @@ func (r *RoutingListener) Deregister(o Observer) {
 
 func (r *RoutingListener) UpdateAll(event *Event) {
 	for _, o := range observers {
-		o.Update(*event)
+		o.Update(event)
 	}
 }
