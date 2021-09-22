@@ -29,12 +29,12 @@ type Observer interface {
 }
 
 type Event struct {
-	fromPubKey    string
-	fromAlias     string
-	incomingMSats uint64
-	toAlias       string
-	toPubKey      string
-	outgoingMSats uint64
+	FromPubKey    string
+	FromAlias     string
+	IncomingMSats uint64
+	ToAlias       string
+	ToPubKey      string
+	OutgoingMSats uint64
 }
 
 type Config struct {
@@ -83,7 +83,6 @@ func New(config *Config) *RoutingListener {
 	if err != nil {
 		log.Fatalf("Cannot connect to %s with cert %s\n", config.RpcHost, config.CertPath)
 	}
-	defer conn.Close()
 
 	router = routerrpc.NewRouterClient(conn)
 	lndcli = lnrpc.NewLightningClient(conn)
@@ -120,19 +119,13 @@ func (r *RoutingListener) Start() {
 				continue
 			}
 			r.UpdateAll(&Event{
-				fromPubKey:    incomingChanInfo.Node1Pub,
-				fromAlias:     incomingChanInfo.Node1Pub,
-				incomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
-				toAlias:       outgoingChanInfo.Node2Pub,
-				toPubKey:      outgoingChanInfo.Node2Pub,
-				outgoingMSats: event.GetForwardEvent().GetInfo().OutgoingAmtMsat,
+				FromPubKey:    incomingChanInfo.Node1Pub,
+				FromAlias:     incomingChanInfo.Node1Pub,
+				IncomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
+				ToAlias:       outgoingChanInfo.Node2Pub,
+				ToPubKey:      outgoingChanInfo.Node2Pub,
+				OutgoingMSats: event.GetForwardEvent().GetInfo().OutgoingAmtMsat,
 			})
-			//	log.Printf("ChanInfo: %#v\n", incomingChanInfo)
-			log.Printf("Forward Event incoming msats: %#v\n", event.GetIncomingChannelId())
-			log.Printf("Forward Event incoming msats: %#v\n", event.GetOutgoingChannelId())
-			log.Printf("Forward Event incoming msats: %d\n", event.GetForwardEvent().GetInfo().IncomingAmtMsat)
-			log.Printf("Forward Event outgoing msats: %d\n", event.GetForwardEvent().GetInfo().OutgoingAmtMsat)
-			log.Printf("Forward Event fee msats: %d\n", event.GetForwardEvent().GetInfo().IncomingAmtMsat-event.GetForwardEvent().GetInfo().OutgoingAmtMsat)
 		}
 	}
 }
