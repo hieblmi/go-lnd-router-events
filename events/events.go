@@ -120,10 +120,10 @@ func (r *RoutingListener) Start() {
 			}
 			r.UpdateAll(&Event{
 				FromPubKey:    incomingChanInfo.Node1Pub,
-				FromAlias:     incomingChanInfo.Node1Pub,
+				FromAlias:     getNodeAlias(incomingChanInfo.Node1Pub),
 				IncomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
 				ToAlias:       outgoingChanInfo.Node2Pub,
-				ToPubKey:      outgoingChanInfo.Node2Pub,
+				ToPubKey:      getNodeAlias(outgoingChanInfo.Node2Pub),
 				OutgoingMSats: event.GetForwardEvent().GetInfo().OutgoingAmtMsat,
 			})
 		}
@@ -149,4 +149,15 @@ func (r *RoutingListener) UpdateAll(event *Event) {
 	for _, o := range observers {
 		o.Update(event)
 	}
+}
+
+func getNodeAlias(pubKey string) string {
+
+	nodeInfo, err := lndcli.GetNodeInfo(context.Background(), &lnrpc.NodeInfoRequest{
+		PubKey: pubKey,
+	})
+	if err == nil {
+		log.Printf("Node info: %#v\n", nodeInfo)
+	}
+	return nodeInfo.Node.Alias
 }
