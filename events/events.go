@@ -29,6 +29,7 @@ type Observer interface {
 }
 
 type Event struct {
+	Type          string
 	FromPubKey    string
 	FromAlias     string
 	IncomingMSats uint64
@@ -105,8 +106,18 @@ func (r *RoutingListener) Start() {
 		}
 
 		switch event.Event.(type) {
-		//		case *routerrpc.HtlcEvent_SettleEvent:
-		//			log.Printf("Settle Event Preimage: %#v\n", event.GetSettleEvent())
+		case *routerrpc.HtlcEvent_SettleEvent:
+			r.UpdateAll(&Event{
+				Type: "ForwardEvent",
+			})
+		case *routerrpc.HtlcEvent_LinkFailEvent:
+			r.UpdateAll(&Event{
+				Type: "LinkFailEvent",
+			})
+		case *routerrpc.HtlcEvent_ForwardFailEvent:
+			r.UpdateAll(&Event{
+				Type: "ForwardFailEvent",
+			})
 		case *routerrpc.HtlcEvent_ForwardEvent:
 			incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
 			if err != nil {
@@ -119,6 +130,7 @@ func (r *RoutingListener) Start() {
 				continue
 			}
 			r.UpdateAll(&Event{
+				Type:          "ForwardEvent",
 				FromPubKey:    incomingChanInfo.Node1Pub,
 				FromAlias:     getNodeAlias(incomingChanInfo.Node1Pub),
 				IncomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
