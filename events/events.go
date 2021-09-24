@@ -50,6 +50,8 @@ type Config struct {
 
 var observers map[string]Observer
 
+var forwardsInFlight map[uint64]*Event
+
 var router routerrpc.RouterClient
 
 var lndcli lnrpc.LightningClient
@@ -131,19 +133,33 @@ func (r *RoutingListener) Start() {
 			HtlcId_Out: event.OutgoingHtlcId,
 		}
 
+		inFlightIndex := e.ChanId_In + e.ChanId_Out + e.HtlcId_In + e.HtlcId_Out
+
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
-			e.Type = "SettleEvent"
+			temp_e, exists := forwardsInFlight[inFlightIndex]
+			if !exists {
+				log.Printf("Could not retrieve forward in flight for index %v, event %#v\n", inFlightIndex, e)
+				continue
+			}
+			temp_e.Type = "SettleEvent"
+			r.UpdateAll(temp_e)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			e.Type = "LinkFailEvent"
+			delete(forwardsInFlight, inFlightIndex)
+			log.Printf("Deleted LinkFailEvent: %#v\n", e)
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
 			e.Type = "ForwardFailEvent"
+			delete(forwardsInFlight, inFlightIndex)
+			log.Printf("Deleted ForwardFailEvent: %#v\n", e)
 		case *routerrpc.HtlcEvent_ForwardEvent:
 			e.Type = "ForwardEvent"
 			e.IncomingMSats = event.GetForwardEvent().GetInfo().IncomingAmtMsat
 			e.OutgoingMSats = event.GetForwardEvent().GetInfo().OutgoingAmtMsat
+			forwardsInFlight[inFlightIndex] = e
+			log.Printf("Added ForwardEvent: %#v\n", e)
 		}
-		r.UpdateAll(e)
+		log.Printf("Size of inflight forward map: %d\n", len(forwardsInFlight))
 	}
 }
 
