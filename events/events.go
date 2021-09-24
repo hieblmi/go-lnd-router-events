@@ -121,8 +121,8 @@ func (r *RoutingListener) Start() {
 		}
 
 		e := &Event{
-			FromPubKey: incomingChanInfo.Node2Pub,
-			FromAlias:  getNodeAlias(incomingChanInfo.Node2Pub),
+			FromPubKey: incomingChanInfo.Node1Pub,
+			FromAlias:  getNodeAlias(incomingChanInfo.Node1Pub),
 			ToPubKey:   outgoingChanInfo.Node1Pub,
 			ToAlias:    getNodeAlias(outgoingChanInfo.Node1Pub),
 			ChanId_In:  event.IncomingChannelId,
