@@ -36,6 +36,10 @@ type Event struct {
 	ToAlias       string
 	ToPubKey      string
 	OutgoingMSats uint64
+	ChanId_In     uint64
+	ChanId_Out    uint64
+	HtlcId_In     uint64
+	HtlcId_Out    uint64
 }
 
 type Config struct {
@@ -121,6 +125,10 @@ func (r *RoutingListener) Start() {
 			FromAlias:  getNodeAlias(incomingChanInfo.Node2Pub),
 			ToPubKey:   outgoingChanInfo.Node1Pub,
 			ToAlias:    getNodeAlias(outgoingChanInfo.Node1Pub),
+			ChanId_In:  event.IncomingChannelId,
+			ChanId_Out: event.OutgoingChannelId,
+			HtlcId_In:  event.IncomingHtlcId,
+			HtlcId_Out: event.OutgoingHtlcId,
 		}
 
 		switch event.Event.(type) {
