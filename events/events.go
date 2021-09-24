@@ -142,7 +142,6 @@ func (r *RoutingListener) Start() {
 				log.Printf("Could not retrieve forward in flight for index %v, event %#v\n", inFlightIndex, e)
 				continue
 			}
-			temp_e.Type = "SettleEvent"
 			r.UpdateAll(temp_e)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			e.Type = "LinkFailEvent"
