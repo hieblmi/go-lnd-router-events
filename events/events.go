@@ -60,6 +60,7 @@ var lndcli lnrpc.LightningClient
 // Creates a new instance of router event listener that observers can subscribe to
 func New(config *Config) *RoutingListener {
 	observers = make(map[string]Observer)
+	forwardsInFlight = make(map[uint64]*Event)
 
 	macaroonBytes, err := ioutil.ReadFile(config.MacaroonPath)
 	if err != nil {
