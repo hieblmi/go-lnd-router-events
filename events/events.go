@@ -105,40 +105,37 @@ func (r *RoutingListener) Start() {
 			return
 		}
 
+		incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
+		if err != nil {
+			log.Println("Cannot get incoming channel info", err)
+			continue
+		}
+		outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
+		if err != nil {
+			log.Println("Cannot get outgoing channel info", err)
+			continue
+		}
+
+		e := &Event{
+			FromPubKey: incomingChanInfo.Node1Pub,
+			FromAlias:  getNodeAlias(incomingChanInfo.Node1Pub),
+			ToPubKey:   outgoingChanInfo.Node1Pub,
+			ToAlias:    getNodeAlias(outgoingChanInfo.Node1Pub),
+		}
+
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
-			r.UpdateAll(&Event{
-				Type: "ForwardEvent",
-			})
+			e.Type = "SettleEvent"
 		case *routerrpc.HtlcEvent_LinkFailEvent:
-			r.UpdateAll(&Event{
-				Type: "LinkFailEvent",
-			})
+			e.Type = "LinkFailEvent"
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
-			r.UpdateAll(&Event{
-				Type: "ForwardFailEvent",
-			})
+			e.Type = "ForwardFailEvent"
 		case *routerrpc.HtlcEvent_ForwardEvent:
-			incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
-			if err != nil {
-				log.Println("Cannot get incoming channel info")
-				continue
-			}
-			outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
-			if err != nil {
-				log.Println("Cannot get outgoing channel info")
-				continue
-			}
-			r.UpdateAll(&Event{
-				Type:          "ForwardEvent",
-				FromPubKey:    incomingChanInfo.Node1Pub,
-				FromAlias:     getNodeAlias(incomingChanInfo.Node1Pub),
-				IncomingMSats: event.GetForwardEvent().GetInfo().IncomingAmtMsat,
-				ToAlias:       outgoingChanInfo.Node2Pub,
-				ToPubKey:      getNodeAlias(outgoingChanInfo.Node2Pub),
-				OutgoingMSats: event.GetForwardEvent().GetInfo().OutgoingAmtMsat,
-			})
+			e.Type = "ForwardEvent"
+			e.IncomingMSats = event.GetForwardEvent().GetInfo().IncomingAmtMsat
+			e.OutgoingMSats = event.GetForwardEvent().GetInfo().OutgoingAmtMsat
 		}
+		r.UpdateAll(e)
 	}
 }
 
@@ -168,8 +165,8 @@ func getNodeAlias(pubKey string) string {
 	nodeInfo, err := lndcli.GetNodeInfo(context.Background(), &lnrpc.NodeInfoRequest{
 		PubKey: pubKey,
 	})
-	if err == nil {
-		log.Printf("Node info: %#v\n", nodeInfo)
+	if err != nil {
+		log.Printf("Cannot retrieve node info for pubkey %s\n", pubKey)
 	}
 	return nodeInfo.Node.Alias
 }
