@@ -143,21 +143,23 @@ func (r *RoutingListener) Start() {
 				log.Printf("Could not retrieve forward in flight for index %v, event %#v\n", inFlightIndex, e)
 				continue
 			}
+			e.Type = "SettleEvent"
+			delete(forwardsInFlight, inFlightIndex)
 			r.UpdateAll(temp_e)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			e.Type = "LinkFailEvent"
 			delete(forwardsInFlight, inFlightIndex)
-			log.Printf("Deleted LinkFailEvent: %#v\n", e)
+			log.Printf("Deleted LinkFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
 			e.Type = "ForwardFailEvent"
 			delete(forwardsInFlight, inFlightIndex)
-			log.Printf("Deleted ForwardFailEvent: %#v\n", e)
+			log.Printf("Deleted ForwardFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardEvent:
 			e.Type = "ForwardEvent"
 			e.IncomingMSats = event.GetForwardEvent().GetInfo().IncomingAmtMsat
 			e.OutgoingMSats = event.GetForwardEvent().GetInfo().OutgoingAmtMsat
 			forwardsInFlight[inFlightIndex] = e
-			log.Printf("Added ForwardEvent: %#v\n", e)
+			log.Printf("Added ForwardEvent\n")
 		}
 		log.Printf("Size of inflight forward map: %d\n", len(forwardsInFlight))
 	}
