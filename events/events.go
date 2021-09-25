@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -125,9 +126,9 @@ func (r *RoutingListener) Start() {
 
 		e := &Event{
 			FromPubKey: incomingChanInfo.Node1Pub,
-			FromAlias:  getNodeAlias(incomingChanInfo.Node1Pub),
+			FromAlias:  fmt.Sprintf("%s/%s", getNodeAlias(incomingChanInfo.Node1Pub), getNodeAlias(incomingChanInfo.Node2Pub)),
 			ToPubKey:   outgoingChanInfo.Node1Pub,
-			ToAlias:    getNodeAlias(outgoingChanInfo.Node1Pub),
+			ToAlias:    fmt.Sprintf("%s/%s", getNodeAlias(outgoingChanInfo.Node1Pub), getNodeAlias(outgoingChanInfo.Node2Pub)),
 			ChanId_In:  event.IncomingChannelId,
 			ChanId_Out: event.OutgoingChannelId,
 			HtlcId_In:  event.IncomingHtlcId,
@@ -143,8 +144,8 @@ func (r *RoutingListener) Start() {
 				log.Printf("Could not retrieve forward in flight for index %v, event %#v\n", inFlightIndex, e)
 				continue
 			}
-			e.Type = "SettleEvent"
 			delete(forwardsInFlight, inFlightIndex)
+			temp_e.Type = "SettleEvent"
 			r.UpdateAll(temp_e)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			e.Type = "LinkFailEvent"
