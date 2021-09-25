@@ -51,7 +51,7 @@ type Config struct {
 
 var observers map[string]Observer
 
-var forwardsInFlight map[uint64]*Event
+var forwardsInFlight map[uint64]*routerrpc.HtlcEvent
 
 var router routerrpc.RouterClient
 
@@ -61,7 +61,7 @@ var lndcli lnrpc.LightningClient
 // Creates a new instance of router event listener that observers can subscribe to
 func New(config *Config) *RoutingListener {
 	observers = make(map[string]Observer)
-	forwardsInFlight = make(map[uint64]*Event)
+	forwardsInFlight = make(map[uint64]*routerrpc.HtlcEvent)
 
 	macaroonBytes, err := ioutil.ReadFile(config.MacaroonPath)
 	if err != nil {
@@ -113,56 +113,62 @@ func (r *RoutingListener) Start() {
 			return
 		}
 
-		incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
-		if err != nil {
-			log.Println("Cannot get incoming channel info", err)
-			continue
-		}
-		outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
-		if err != nil {
-			log.Println("Cannot get outgoing channel info", err)
-			continue
-		}
-
-		e := &Event{
-			FromPubKey: incomingChanInfo.Node1Pub,
-			FromAlias:  fmt.Sprintf("%s/%s", getNodeAlias(incomingChanInfo.Node1Pub), getNodeAlias(incomingChanInfo.Node2Pub)),
-			ToPubKey:   outgoingChanInfo.Node1Pub,
-			ToAlias:    fmt.Sprintf("%s/%s", getNodeAlias(outgoingChanInfo.Node1Pub), getNodeAlias(outgoingChanInfo.Node2Pub)),
-			ChanId_In:  event.IncomingChannelId,
-			ChanId_Out: event.OutgoingChannelId,
-			HtlcId_In:  event.IncomingHtlcId,
-			HtlcId_Out: event.OutgoingHtlcId,
-		}
-
-		inFlightIndex := e.ChanId_In + e.ChanId_Out + e.HtlcId_In + e.HtlcId_Out
+		// calculate key for in flight forward events to identify settlement details
+		inFlightKey := event.IncomingChannelId + event.OutgoingChannelId + event.IncomingHtlcId + event.OutgoingHtlcId
 
 		switch event.Event.(type) {
 		case *routerrpc.HtlcEvent_SettleEvent:
-			temp_e, exists := forwardsInFlight[inFlightIndex]
+			e, exists := forwardsInFlight[inFlightKey]
 			if !exists {
-				log.Printf("Could not retrieve forward in flight for index %v, event %#v\n", inFlightIndex, e)
+				log.Printf("Could not retrieve forward in flight for key %v\n", inFlightKey)
 				continue
 			}
-			delete(forwardsInFlight, inFlightIndex)
-			temp_e.Type = "SettleEvent"
-			r.UpdateAll(temp_e)
+			settleEvent := settleEventDetails(e)
+			r.UpdateAll(settleEvent)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
-			e.Type = "LinkFailEvent"
-			delete(forwardsInFlight, inFlightIndex)
+			delete(forwardsInFlight, inFlightKey)
 			log.Printf("Deleted LinkFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
-			e.Type = "ForwardFailEvent"
-			delete(forwardsInFlight, inFlightIndex)
+			delete(forwardsInFlight, inFlightKey)
 			log.Printf("Deleted ForwardFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardEvent:
-			e.Type = "ForwardEvent"
-			e.IncomingMSats = event.GetForwardEvent().GetInfo().IncomingAmtMsat
-			e.OutgoingMSats = event.GetForwardEvent().GetInfo().OutgoingAmtMsat
-			forwardsInFlight[inFlightIndex] = e
+			forwardsInFlight[inFlightKey] = event
 			log.Printf("Added ForwardEvent\n")
 		}
 		log.Printf("Size of inflight forward map: %d\n", len(forwardsInFlight))
+	}
+}
+
+func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
+
+	var fromAlias, toAlias string
+
+	incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
+	if err != nil {
+		log.Println("Cannot get incoming channel info", err)
+		fromAlias = "Info not available"
+	} else {
+		fromAlias = fmt.Sprintf("%s/%s", getNodeAlias(incomingChanInfo.Node1Pub), getNodeAlias(incomingChanInfo.Node2Pub))
+	}
+
+	outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
+	if err != nil {
+		log.Println("Cannot get outgoing channel info", err)
+		toAlias = "Nowhere - you've been paid"
+	} else {
+		toAlias = fmt.Sprintf("%s/%s", getNodeAlias(outgoingChanInfo.Node1Pub), getNodeAlias(outgoingChanInfo.Node2Pub))
+	}
+
+	return &Event{
+		Type:       "SettleEvent",
+		FromPubKey: incomingChanInfo.Node1Pub,
+		FromAlias:  fromAlias,
+		ToPubKey:   outgoingChanInfo.Node1Pub,
+		ToAlias:    toAlias,
+		ChanId_In:  event.IncomingChannelId,
+		ChanId_Out: event.OutgoingChannelId,
+		HtlcId_In:  event.IncomingHtlcId,
+		HtlcId_Out: event.OutgoingHtlcId,
 	}
 }
 
