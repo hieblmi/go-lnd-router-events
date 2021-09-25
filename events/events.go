@@ -133,6 +133,8 @@ func (r *RoutingListener) Start() {
 			}
 			delete(forwardsInFlight, inFlightKey)
 			settleEvent := settleEventDetails(e)
+			settleEvent.IncomingMSats = e.GetForwardEvent().Info.IncomingAmtMsat
+			settleEvent.OutgoingMSats = e.GetForwardEvent().Info.OutgoingAmtMsat
 			r.UpdateAll(settleEvent)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			delete(forwardsInFlight, inFlightKey)
@@ -157,8 +159,7 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 		log.Println("Cannot get incoming channel info", err)
 		fromAlias = "Info not available"
 	} else {
-		f := getNodeAlias(incomingChanInfo.Node1Pub)
-		if f == thisNodePubKey {
+		if incomingChanInfo.Node1Pub == thisNodePubKey {
 			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node2Pub))
 		} else {
 			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node1Pub))
@@ -170,8 +171,7 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 		log.Println("Cannot get outgoing channel info", err)
 		toAlias = "Nowhere - you've been paid"
 	} else {
-		i := getNodeAlias(outgoingChanInfo.Node1Pub)
-		if i == thisNodePubKey {
+		if outgoingChanInfo.Node1Pub == thisNodePubKey {
 			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node2Pub))
 		} else {
 			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node1Pub))
@@ -184,10 +184,6 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 		FromAlias:  fromAlias,
 		ToPubKey:   outgoingChanInfo.Node1Pub,
 		ToAlias:    toAlias,
-		ChanId_In:  event.IncomingChannelId,
-		ChanId_Out: event.OutgoingChannelId,
-		HtlcId_In:  event.IncomingHtlcId,
-		HtlcId_Out: event.OutgoingHtlcId,
 	}
 }
 
