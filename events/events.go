@@ -57,6 +57,8 @@ var router routerrpc.RouterClient
 
 var lndcli lnrpc.LightningClient
 
+var thisNodePubKey string
+
 // Reads lnd config parameters
 // Creates a new instance of router event listener that observers can subscribe to
 func New(config *Config) *RoutingListener {
@@ -95,6 +97,12 @@ func New(config *Config) *RoutingListener {
 
 	router = routerrpc.NewRouterClient(conn)
 	lndcli = lnrpc.NewLightningClient(conn)
+	info, err := lndcli.GetInfo(context.Background(), &lnrpc.GetInfoRequest{})
+
+	if err != nil {
+		log.Fatal("Could not retrieve this node's pub key")
+	}
+	thisNodePubKey = info.IdentityPubkey
 
 	return &RoutingListener{}
 }
@@ -123,6 +131,7 @@ func (r *RoutingListener) Start() {
 				log.Printf("Could not retrieve forward in flight for key %v\n", inFlightKey)
 				continue
 			}
+			delete(forwardsInFlight, inFlightKey)
 			settleEvent := settleEventDetails(e)
 			r.UpdateAll(settleEvent)
 		case *routerrpc.HtlcEvent_LinkFailEvent:
@@ -148,7 +157,12 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 		log.Println("Cannot get incoming channel info", err)
 		fromAlias = "Info not available"
 	} else {
-		fromAlias = fmt.Sprintf("%s/%s", getNodeAlias(incomingChanInfo.Node1Pub), getNodeAlias(incomingChanInfo.Node2Pub))
+		f := getNodeAlias(incomingChanInfo.Node1Pub)
+		if f == thisNodePubKey {
+			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node2Pub))
+		} else {
+			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node1Pub))
+		}
 	}
 
 	outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
@@ -156,7 +170,12 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 		log.Println("Cannot get outgoing channel info", err)
 		toAlias = "Nowhere - you've been paid"
 	} else {
-		toAlias = fmt.Sprintf("%s/%s", getNodeAlias(outgoingChanInfo.Node1Pub), getNodeAlias(outgoingChanInfo.Node2Pub))
+		i := getNodeAlias(outgoingChanInfo.Node1Pub)
+		if i == thisNodePubKey {
+			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node2Pub))
+		} else {
+			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node1Pub))
+		}
 	}
 
 	return &Event{
