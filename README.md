@@ -58,6 +58,6 @@ In case the payment through our node isn't successful we will observe a [Forward
 
 ### Disclaimer
 This stuff is experimental so use it with care. I am highly appreciative of feedback and ways to improve my understanding of everything Lightning.
-If you like what you see you could send me a tip. 
 
+If you like what you see you could send me a tip :-) 
 Download a [LightningAddress](https://lightningaddress.com/) enabled wallet like [Blixt](https://blixtwallet.github.io/) or [BlueWallet](https://bluewallet.io/) and tip to: ⚡heebs@allmysats.com
