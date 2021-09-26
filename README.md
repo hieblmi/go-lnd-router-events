@@ -49,7 +49,7 @@ listener := events.New(&events.Config{
 ```
 
 ### Little more detail
- To retrieve the details of a successful payment we have to match the SettleEvent's ids to the ids of the preceeding ForwardEvent.In this instance this is solved by keeping a map of [key|ForwardEvent] and retrieve a given forward attempt when the respective SettleEvent occurs. The key is calculated by 
+ To retrieve the details of a successful payment we have to match the SettleEvent's ids to the ids of the preceeding ForwardEvent. In this instance this is solved by keeping a map of [key|ForwardEvent] and retrieve a given forward attempt when the respective SettleEvent occurs. The key is calculated by 
 ```
 IncomingChannelId + OutgoingChannelId + IncomingHtlcId + OutgoingHtlcId
 ```
