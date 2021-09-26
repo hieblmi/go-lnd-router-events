@@ -14,6 +14,11 @@ the following statistics from its related preceeding [ForwardEvent](https://api.
 * HtlcId_Out   
 ```
 
+## Installation
+```
+go get github.com/hieblmi/go-lnd-router-events
+```
+
 ## How it works
 LND's router RPC interface allows to listen to [ForwardEvent](https://api.lightning.community/#routerrpc-forwardevent)s that basically represent an attempt from an initiating peer on a route to push a payment through our node. The successful forward events can be obtained by clients who implement
 ```
