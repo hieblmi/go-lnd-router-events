@@ -152,37 +152,43 @@ func (r *RoutingListener) Start() {
 
 func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 
-	var fromAlias, toAlias string
+	var fromAlias, toAlias, fromPubKey, toPubKey string
 
 	incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
 	if err != nil {
 		log.Println("Cannot get incoming channel info", err)
+		fromPubKey = "Incoming pub key not available"
 		fromAlias = "Info not available"
 	} else {
 		if incomingChanInfo.Node1Pub == thisNodePubKey {
 			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node2Pub))
+			fromPubKey = incomingChanInfo.Node2Pub
 		} else {
 			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node1Pub))
+			fromPubKey = incomingChanInfo.Node1Pub
 		}
 	}
 
 	outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
 	if err != nil {
 		log.Println("Cannot get outgoing channel info", err)
+		toPubKey = "Outgoing pub key not available"
 		toAlias = "Nowhere - you've been paid"
 	} else {
 		if outgoingChanInfo.Node1Pub == thisNodePubKey {
+			toPubKey = outgoingChanInfo.Node2Pub
 			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node2Pub))
 		} else {
+			toPubKey = outgoingChanInfo.Node1Pub
 			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node1Pub))
 		}
 	}
 
 	return &Event{
 		Type:       "SettleEvent",
-		FromPubKey: incomingChanInfo.Node1Pub,
+		FromPubKey: fromPubKey,
 		FromAlias:  fromAlias,
-		ToPubKey:   outgoingChanInfo.Node1Pub,
+		ToPubKey:   toPubKey,
 		ToAlias:    toAlias,
 	}
 }
