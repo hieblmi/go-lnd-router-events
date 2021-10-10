@@ -1,6 +1,6 @@
 # ⚡go-lnd-router-events
-This module allows subscribers to get notified about [HTLC](https://rusty.ozlabs.org/?p=462) [SettleEvent](https://api.lightning.community/#routerrpc-settleevent)s and retrieve
-the following statistics from its related preceeding [ForwardEvent](https://api.lightning.community/#routerrpc-forwardevent):
+This module allows subscribers to get notified about [HTLC](https://rusty.ozlabs.org/?p=462) [SettleEvent](https://api.lightning.community/#routerrpc-settleevent)s and [InvoiceEvent](https://api.lightning.community/?python#subscribeinvoices)s. 
+A subscripiton to HTLC events retrieve the following statistics from its related preceeding [ForwardEvent](https://api.lightning.community/#routerrpc-forwardevent):
 ```
 * FromPubKey   
 * FromAlias    
@@ -12,6 +12,13 @@ the following statistics from its related preceeding [ForwardEvent](https://api.
 * ChanId_Out   
 * HtlcId_In    
 * HtlcId_Out   
+```
+
+A subscripiton to invoice events retrieves the invoice related fields:
+```
+IsSettled
+SettleAmount_msat
+Preimage
 ```
 
 ## Installation
