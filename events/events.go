@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
@@ -15,14 +16,33 @@ import (
 	"gopkg.in/macaroon.v2"
 )
 
-type Observable interface {
-	Register(observer *Observer)
-	Deregister(observer *Observer)
-	Start()
-	notifyAll(event *Event)
+type ObservableEventType int
+
+const (
+	SettledInvoice ObservableEventType = iota
+	Forward
+	eventLimit
+)
+
+func (e ObservableEventType) String() string {
+	strings := [...]string{"SettleInvoice", "Forward"}
+
+	// prevent panicking in case of status is out-of-range
+	if e < SettledInvoice || e > Forward {
+		return "Unknown"
+	}
+
+	return strings[e]
 }
 
-type RoutingListener struct{}
+type Observable interface {
+	Register(observer *Observer, e ObservableEventType)
+	Deregister(observer *Observer, e ObservableEventType)
+	Start()
+	UpdateAll()
+}
+
+type LNDEventListener struct{}
 
 type Observer interface {
 	Update(event *Event)
@@ -30,7 +50,8 @@ type Observer interface {
 }
 
 type Event struct {
-	Type          string
+	Type ObservableEventType
+	// Forward fields
 	FromPubKey    string
 	FromAlias     string
 	IncomingMSats uint64
@@ -41,6 +62,10 @@ type Event struct {
 	ChanId_Out    uint64
 	HtlcId_In     uint64
 	HtlcId_Out    uint64
+	// Invoice fields
+	IsSettled         bool
+	SettleAmount_msat int64
+	Preimage          []uint8
 }
 
 type Config struct {
@@ -49,7 +74,7 @@ type Config struct {
 	RpcHost      string
 }
 
-var observers map[string]Observer
+var observers map[ObservableEventType][]Observer
 
 var forwardsInFlight map[uint64]*routerrpc.HtlcEvent
 
@@ -57,12 +82,12 @@ var router routerrpc.RouterClient
 
 var lndcli lnrpc.LightningClient
 
-var thisNodePubKey string
+var thisNodesPubKey string
 
 // Reads lnd config parameters
 // Creates a new instance of router event listener that observers can subscribe to
-func New(config *Config) *RoutingListener {
-	observers = make(map[string]Observer)
+func New(config *Config) *LNDEventListener {
+	observers = make(map[ObservableEventType][]Observer)
 	forwardsInFlight = make(map[uint64]*routerrpc.HtlcEvent)
 
 	macaroonBytes, err := ioutil.ReadFile(config.MacaroonPath)
@@ -82,7 +107,7 @@ func New(config *Config) *RoutingListener {
 
 	creds, err := credentials.NewClientTLSFromFile(config.CertPath, "")
 	if err != nil {
-		log.Fatal("Cannot load credentials from CertPath: ", config.CertPath)
+		log.Fatal("Cannot load credentials from CertPath: %s", config.CertPath)
 	}
 
 	opts := []grpc.DialOption{
@@ -100,14 +125,36 @@ func New(config *Config) *RoutingListener {
 	info, err := lndcli.GetInfo(context.Background(), &lnrpc.GetInfoRequest{})
 
 	if err != nil {
-		log.Fatal("Could not retrieve this node's pub key")
+		log.Fatal("Could not retrieve this node's pub key %#v", err)
 	}
-	thisNodePubKey = info.IdentityPubkey
+	thisNodesPubKey = info.IdentityPubkey
 
-	return &RoutingListener{}
+	return &LNDEventListener{}
 }
 
-func (r *RoutingListener) Start() {
+func (r *LNDEventListener) Start() {
+
+	var wg sync.WaitGroup
+
+	for e := ObservableEventType(0); e < eventLimit; e++ {
+		_, exists := observers[e]
+		if exists {
+			wg.Add(1)
+			switch e {
+			case SettledInvoice:
+				go r.subscribeInvoiceSettlements()
+			case Forward:
+				go r.subscribeHtlcEvents()
+			default:
+			}
+		}
+	}
+
+	wg.Wait()
+}
+
+func (r *LNDEventListener) subscribeHtlcEvents() {
+
 	events, err := router.SubscribeHtlcEvents(context.Background(), &routerrpc.SubscribeHtlcEventsRequest{})
 	if err != nil {
 		log.Fatalf("Cannot subscribe to Htlc events: %#v\n", err)
@@ -128,26 +175,55 @@ func (r *RoutingListener) Start() {
 		case *routerrpc.HtlcEvent_SettleEvent:
 			e, exists := forwardsInFlight[inFlightKey]
 			if !exists {
-				log.Printf("Could not retrieve forward in flight for key %v\n", inFlightKey)
 				continue
 			}
+
 			delete(forwardsInFlight, inFlightKey)
+
 			settleEvent := settleEventDetails(e)
-			settleEvent.IncomingMSats = e.GetForwardEvent().Info.IncomingAmtMsat
-			settleEvent.OutgoingMSats = e.GetForwardEvent().Info.OutgoingAmtMsat
 			r.UpdateAll(settleEvent)
+
 		case *routerrpc.HtlcEvent_LinkFailEvent:
 			delete(forwardsInFlight, inFlightKey)
-			log.Printf("Deleted LinkFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardFailEvent:
 			delete(forwardsInFlight, inFlightKey)
-			log.Printf("Deleted ForwardFailEvent\n")
 		case *routerrpc.HtlcEvent_ForwardEvent:
 			forwardsInFlight[inFlightKey] = event
-			log.Printf("Added ForwardEvent\n")
 		}
 		log.Printf("Size of inflight forward map: %d\n", len(forwardsInFlight))
 	}
+}
+
+func (r *LNDEventListener) subscribeInvoiceSettlements() {
+
+	req := &lnrpc.InvoiceSubscription{}
+
+	ctx, cancelInvoiceSubscription := context.WithCancel(context.Background())
+
+	defer cancelInvoiceSubscription()
+
+	invoiceSubscription, err := lndcli.SubscribeInvoices(ctx, req)
+
+	if err != nil {
+		log.Fatalf("Cannot subscribe to invoices: %#v\n", err)
+	}
+
+	log.Println("Listening for invoice events...")
+	for {
+		invoiceUpdate, err := invoiceSubscription.Recv()
+		if err != nil {
+			log.Println("got error from events.Recv()", err)
+			return
+		}
+		log.Printf("Invoice update: %#v\n", invoiceUpdate)
+		r.UpdateAll(&Event{
+			Type:              SettledInvoice,
+			IsSettled:         invoiceUpdate.Settled,
+			SettleAmount_msat: invoiceUpdate.AmtPaidMsat,
+			Preimage:          invoiceUpdate.RPreimage,
+		})
+	}
+
 }
 
 func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
@@ -155,12 +231,13 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 	var fromAlias, toAlias, fromPubKey, toPubKey string
 
 	incomingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.IncomingChannelId})
+
 	if err != nil {
 		log.Println("Cannot get incoming channel info", err)
 		fromPubKey = "Incoming pub key not available"
 		fromAlias = "Info not available"
 	} else {
-		if incomingChanInfo.Node1Pub == thisNodePubKey {
+		if incomingChanInfo.Node1Pub == thisNodesPubKey {
 			fromAlias = fmt.Sprintf("%s", getNodeAlias(incomingChanInfo.Node2Pub))
 			fromPubKey = incomingChanInfo.Node2Pub
 		} else {
@@ -170,12 +247,13 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 	}
 
 	outgoingChanInfo, err := lndcli.GetChanInfo(context.Background(), &lnrpc.ChanInfoRequest{ChanId: event.OutgoingChannelId})
+
 	if err != nil {
 		log.Println("Cannot get outgoing channel info", err)
 		toPubKey = "Outgoing pub key not available"
 		toAlias = "Nowhere - you've been paid"
 	} else {
-		if outgoingChanInfo.Node1Pub == thisNodePubKey {
+		if outgoingChanInfo.Node1Pub == thisNodesPubKey {
 			toPubKey = outgoingChanInfo.Node2Pub
 			toAlias = fmt.Sprintf("%s", getNodeAlias(outgoingChanInfo.Node2Pub))
 		} else {
@@ -185,31 +263,33 @@ func settleEventDetails(event *routerrpc.HtlcEvent) *Event {
 	}
 
 	return &Event{
-		Type:       "SettleEvent",
-		FromPubKey: fromPubKey,
-		FromAlias:  fromAlias,
-		ToPubKey:   toPubKey,
-		ToAlias:    toAlias,
+		Type:          Forward,
+		FromPubKey:    fromPubKey,
+		FromAlias:     fromAlias,
+		ToPubKey:      toPubKey,
+		ToAlias:       toAlias,
+		IncomingMSats: event.GetForwardEvent().Info.IncomingAmtMsat,
+		OutgoingMSats: event.GetForwardEvent().Info.OutgoingAmtMsat,
 	}
 }
 
-func (r *RoutingListener) Register(o Observer) {
-	log.Printf("Registering observer %s\n", o.GetName())
-	observers[o.GetName()] = o
+func (r *LNDEventListener) Register(o Observer, t ObservableEventType) {
+	log.Printf("Registering observer %s for %s events\n", o.GetName(), t.String())
+	observers[t] = append(observers[t], o)
 }
 
-func (r *RoutingListener) Deregister(o Observer) {
-	log.Printf("Deregistering observer %s\n", o.GetName())
-	_, exists := observers[o.GetName()]
+func (r *LNDEventListener) Deregister(o Observer, t ObservableEventType) {
+	log.Printf("Deregistering observer %s for %s events\n", o.GetName(), t.String())
+	_, exists := observers[t]
 	if exists {
-		delete(observers, o.GetName())
+		delete(observers, t)
 	} else {
 		log.Printf("Cannot deregister. EventConsumer does not exists")
 	}
 }
 
-func (r *RoutingListener) UpdateAll(event *Event) {
-	for _, o := range observers {
+func (r *LNDEventListener) UpdateAll(event *Event) {
+	for _, o := range observers[event.Type] {
 		o.Update(event)
 	}
 }
