@@ -16,9 +16,9 @@ A subscripiton to HTLC events retrieve the following statistics from its related
 
 A subscripiton to invoice events retrieves the invoice related fields:
 ```
-IsSettled
-SettleAmount_msat
-Preimage
+* IsSettled
+* SettleAmount_msat
+* Preimage
 ```
 
 ## Installation
