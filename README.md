@@ -34,7 +34,7 @@ type Observer interface {
     GetName() string    
 }
 ```
-and register their observer like so:
+and register their observer, in this case for forward settlements:
 ```
 listener := events.New(&events.Config{
          MacaroonPath: config.MacaroonPath,
@@ -43,7 +43,7 @@ listener := events.New(&events.Config{
  })
  listener.Register(&LndEventObserver{
          Name:     "YourObserverName",                 
- })
+ }, events.Forward)
  listener.Start()
  ```
  The update method then receives successful forward events:
