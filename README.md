@@ -67,4 +67,4 @@ This stuff is experimental so do use it with care. I am highly appreciative of f
 
 If you like what you see you could send me a tip :-)
 
-Download a [LightningAddress](https://lightningaddress.com/) enabled wallet like [Blixt](https://blixtwallet.github.io/) or [BlueWallet](https://bluewallet.io/) and tip to: ⚡heebs@allmysats.com
+Download a [LightningAddress](https://lightningaddress.com/) enabled wallet like [Blixt](https://blixtwallet.github.io/) or [BlueWallet](https://bluewallet.io/) and tip to: ⚡tips@allmysats.com
